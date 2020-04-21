@@ -165,7 +165,13 @@ let info = convertFromUIImagePickerControllerInfoKeyDictionary(info)
   }
 
   @IBAction func signOut(_ sender: UIButton) {
-    dismiss(animated: true, completion: nil)
+    let firebaseAuth = Auth.auth()
+    do {
+        try firebaseAuth.signOut()
+        dismiss(animated: true, completion: nil)
+    } catch let signOutError as NSError {
+        print("Error signing out: \(signOutError.localizedDescription)")
+    }
   }
 
   func showAlert(withTitle title: String, message: String) {
