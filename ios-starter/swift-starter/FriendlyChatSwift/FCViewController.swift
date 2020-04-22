@@ -76,6 +76,7 @@ UITextFieldDelegate, UIImagePickerControllerDelegate, UINavigationControllerDele
     }
     
     func configureStorage() {
+        storageRef = Storage.storage().reference()
     }
     
     func configureRemoteConfig() {
@@ -199,17 +200,38 @@ UITextFieldDelegate, UIImagePickerControllerDelegate, UINavigationControllerDele
         if #available(iOS 8.0, *), let referenceURL = info[convertFromUIImagePickerControllerInfoKey(UIImagePickerController.InfoKey.referenceURL)] as? URL {
             let assets = PHAsset.fetchAssets(withALAssetURLs: [referenceURL], options: nil)
             let asset = assets.firstObject
-            asset?.requestContentEditingInput(with: nil, completionHandler: { (contentEditingInput, info) in
+            asset?.requestContentEditingInput(with: nil, completionHandler: { [weak self] (contentEditingInput, info) in
                 let imageFile = contentEditingInput?.fullSizeImageURL
                 let filePath = "\(uid)/\(Int(Date.timeIntervalSinceReferenceDate * 1000))/\((referenceURL as AnyObject).lastPathComponent!)"
+                guard let strongSelf = self else { return }
+                strongSelf.storageRef.child(filePath)
+                    .putFile(from: imageFile!, metadata: nil) { (metadata, error) in
+                        if let error = error {
+                            let nsError = error as NSError
+                            print("Error uploading: \(nsError.localizedDescription)")
+                            return
+                        }
+                        strongSelf.sendMessage(withData: [Constants.MessageFields.imageURL: strongSelf.storageRef.child((metadata?.path)!).description])
+                }
             })
         } else {
             guard let image = info[convertFromUIImagePickerControllerInfoKey(UIImagePickerController.InfoKey.originalImage)] as? UIImage else { return }
             let imageData = image.jpegData(compressionQuality: 0.8)
             guard let uid = Auth.auth().currentUser?.uid else { return }
             let imagePath = "\(uid)/\(Int(Date.timeIntervalSinceReferenceDate * 1000)).jpg"
+            let metadata = StorageMetadata()
+            metadata.contentType = "image/jpeg"
+            self.storageRef.child(imagePath)
+                .putData(imageData!, metadata: metadata) { [weak self] (metadata, error) in
+                    if let error = error {
+                        print("Error uploading: \(error)")
+                        return
+                    }
+                    guard let strongSelf = self else { return }
+                    strongSelf.sendMessage(withData: [Constants.MessageFields.imageURL: strongSelf.storageRef.child((metadata?.path)!).description])
+            }
         }
-    }
+    } // end func
     
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
         picker.dismiss(animated: true, completion:nil)
